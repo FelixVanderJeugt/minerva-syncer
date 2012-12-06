@@ -118,7 +118,7 @@ initial_config() {
     
 	ask_question "Do you want to sync all courses?" "y n"
 	if [ "$answer" == "n" ] ; then
-		$build_blacklist=1
+		build_blacklist=1
 	fi
 
     echo
