@@ -1,4 +1,3 @@
-
 Minerva Syncer
 ==============
 
@@ -8,6 +7,8 @@ Automatically downloads new files, ask to update changed files, ...
 
 Anyone who finds bugs and stuff, please tell me about them. Do not
 fear testing, I've written no computer/Minerva breaking code.
+
+This is a rewrite of the original script, which can blacklist courses.
 
 Notes
 -----
