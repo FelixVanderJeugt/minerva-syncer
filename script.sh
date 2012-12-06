@@ -9,7 +9,7 @@ temp1="/tmp/temp1"
 temp2="/tmp/temp2"
 temptree="/tmp/temptree"
 home="https://minerva.ugent.be/"
-configdir="/home/pieter/Dropbox/Scripts/syncdata"
+configdir="/home/pieter/Dropbox/Scripts/syncdata2"
 
 interactive=0 #asks to confirm if one
 override=1 # always overrides local changes if 1, and if not interactive
@@ -45,18 +45,16 @@ swap_cookies() {
 #$2 will be the options
 #$3 the question
 ask_question() {
-    read -p "$1 [$2]: " answer
+	read -p "$1 [$2]: " answer
 	while ! contains "$2" "${answer:0:1}"; do
         read -p "Please reply with any of [$1]. " answer
     done
 }
 
 ask_blacklist(){
-	if [ $interactive -eq 1 ] ; then
-		ask_question  "Sync or Blacklist $1?" "s b" 
-		if  [ "$answer" == "b" ]; then
-			blacklist="$blacklist $1;"
-		fi
+	ask_question  "Sync or Blacklist $1?" "s b" 
+	if  [ "$answer" == "b" ]; then
+		blacklist="$blacklist $1;"
 	fi
 }
 
@@ -116,8 +114,9 @@ initial_config() {
         destdir=~/Minerva
     fi
     
-	ask_question "Do you want to sync all courses?" "y n"
+	ask_question "Do you want to sync all courses? y for full download" "y n"
 	if [ "$answer" == "n" ] ; then
+		echo "We will ask you later what courses you want to download"
 		build_blacklist=1
 	fi
 
@@ -149,7 +148,9 @@ load_or_ask_settings() {
 	# First, loading the config file.
 	if test -e "$configdir/config"; then
     	# Yes, this is not secure. Don't edit the file, then.
+    	echo "Loading settings from $configdir/config"
     	. "$configdir/config"
+    	echo "Syncing to $destdir"
 	else
 	   initial_config
 	fi
@@ -213,7 +214,6 @@ build_file_tree(){
 		name=$(echo "$course" | sed 's/,.*//')
 		cidReq=$(echo "$course" | sed 's/.*,//')
 		link="http://minerva.ugent.be/main/document/document.php?cidReq=$cidReq"
-
 		if [ $build_blacklist -eq 1 ] ; then
 			ask_blacklist $name
 		fi
