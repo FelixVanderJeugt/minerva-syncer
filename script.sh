@@ -9,15 +9,13 @@ temp1="/tmp/temp1"
 temp2="/tmp/temp2"
 temptree="/tmp/temptree"
 home="https://minerva.ugent.be/"
-configdir="/home/pieter/Dropbox/Scripts/syncdata2"
-
-interactive=0 #asks to confirm if one
+configdir="$XDG_CONFIG_HOME/minerva-syncer"
+destdir="~/Minerva"
+interactive=0 #asks per file to download. Is promted on each run
 override=1 # always overrides local changes if 1, and if not interactive
 
 blacklist=""
 build_blacklist=0 # builds the blacklist if one
-
-answer=""
 
 # Checks whether space separated $1 contains $2.
 contains() {
@@ -45,28 +43,29 @@ swap_cookies() {
 #$2 will be the options
 #$3 the question
 ask_question() {
-	read -p "$1 [$2]: " answer
+	read -p "$1 [$2]: " $3
 	while ! contains "$2" "${answer:0:1}"; do
-        read -p "Please reply with any of [$1]. " answer
+        read -p "Please reply with any of [$1]. " $3
     done
 }
 
-ask_blacklist(){
-	ask_question  "Sync or Blacklist $1?" "s b" 
-	if  [ "$answer" == "b" ]; then
+ask_and_blacklist(){
+	ask_question  "Sync or Blacklist $1?" "s b" answer
+	if  [ "$answer" == "b" ] ; then
 		blacklist="$blacklist $1;"
 	fi
 }
 
 ask_override(){
 	if [ $interactive -eq 1 ] ; then
-		ask_question "Override $1?" "y n" 
-	else
-		if [ $override -eq 1 ] ; then
-			$answer="y"
+		ask_question "Override $1?" "y n" answer
+		if [ "$answer" == "y" ] ; then
+			return 1
 		else
-			$answer="n"
+			return 0
 		fi
+	else
+		return $override
 	fi
 }
 
@@ -82,16 +81,34 @@ sed_escape() {
     echo "$1" | sed -e 's_/_\\/_g'
 }
 
+ask_new_or_keep() {
+	__value=${!2}
+	if [ ! "$__value" == "" ] ; then
+ 	 		echo "Current $1:"
+ 		echo "	${!2}"
+	    read -p "Enter new $1, or press enter to keep \"${!2}\": " answer
+ 	else
+ 		echo
+ 		read -p "Enter $1: " answer
+ 	fi 
+    
+    echo
+    if [ ! "$answer" == "" ] ; then
+    	eval "$1=\"$answer\""	
+    fi
+}
+
 initial_config() {
 	# Ask the user some questions.
     echo
     echo "Welcome to minerva-syncer."
     echo
-    echo "It seems this is the first time you're running the script."
+    echo "It seems this is the first time you're running the script,"
+    echo "or that you want to change the settings."
     echo "Before we start synchronizing with Minerva, I'll need to know"
     echo "you're UGent username."
-    echo
-    read -p "UGent username: " username
+    ask_new_or_keep "username" username
+ 	
     echo
     echo "Pleased to meet you, $username."
     echo
@@ -105,19 +122,26 @@ initial_config() {
     stty echo
     echo
     echo "Now, which folder would you like so synchronize Minerva to?"
-    echo "If you're OK with \"~/Minerva\", just hit enter. Otherwise,"
-    echo "enter the absolute path to the folder you'd like to use."
+   	echo "Enter the absolute path"
     echo
-    read -p "Destination directory: " destdir
-    # Default value.
-    if test -z "$destdir"; then
-        destdir=~/Minerva
-    fi
     
-	ask_question "Do you want to sync all courses? y for full download" "y n"
+	ask_new_or_keep "destination" destdir
+ 	    
+	ask_question "Do you want to sync all courses? y for full download" "y n" answer
 	if [ "$answer" == "n" ] ; then
 		echo "We will ask you later what courses you want to download"
 		build_blacklist=1
+	fi
+	
+	echo
+	echo "Override local changes:"
+	echo
+	echo "When files are changed on minerva and the local filesystem,"
+	ask_question "would you like the local changes to be overwritten?" "y n" answer
+	if [ "$answer" == "y" ] ; then
+		override=1
+	else
+		override=0
 	fi
 
     echo
@@ -141,6 +165,8 @@ initial_config() {
         echo "username=\"$username\""
         echo "password=\"$password\""
         echo "destdir=\"$destdir\""
+        echo "override=\"$override\""
+        #interactive is not saved, as it's queried each time!
     } > "$configdir/config"
 }
 
@@ -155,6 +181,19 @@ load_or_ask_settings() {
 	   initial_config
 	fi
 
+	
+	ask_question "Do you want to change the profile settings?" "y n" answer
+	if [ "$answer" == "y" ] ; then
+		initial_config
+	fi
+	
+	#ask_question "Do you want to run in interactive mode?" "y n" answer
+	#if [ "$answer" == "y" ] ; then
+	#	interactive=1
+	#fi
+	
+	
+
 	if test -z "$password"; then
 	    stty -echo
 	    read -p "Password for $username: " password; echo
@@ -163,14 +202,14 @@ load_or_ask_settings() {
 }
 
 blacklisted() {
-	answer="n"
 	lst=`echo $blacklist | sed "s/; /\n/g" | sed "s/;$//"`
 	for item in $blacklist
 	do
 		if [ "$item" == "$1;" ]; then
-			answer="y"
+			return 1
 		fi
 	done
+	return 0
 }
 
 build_file_tree(){
@@ -215,11 +254,11 @@ build_file_tree(){
 		cidReq=$(echo "$course" | sed 's/.*,//')
 		link="http://minerva.ugent.be/main/document/document.php?cidReq=$cidReq"
 		if [ $build_blacklist -eq 1 ] ; then
-			ask_blacklist $name
+			ask_and_blacklist $name
 		fi
 
 		blacklisted $name
-		if [ "$answer" == "y" ] ; then
+		if [ $? -eq 1 ] ; then
 			echo "Skipping $name (blacklisted)"
 		else
 			echo "Building tree for $name"
@@ -273,7 +312,7 @@ build_file_tree(){
 	echo " done building the tree!"
 
 	if [ $build_blacklist -eq 1 ] ; then
-		ask_question "Save the blacklist to your config file?" "y n"
+		ask_question "Save the blacklist to your config file?" "y n" answer
 		if [ "$answer" = "y" ] ; then
 			echo "blacklist=\"$blacklist\"" >> "$configdir/config"
 		fi
@@ -309,7 +348,7 @@ sync_files() {
 		    ours=$(stat -c %Y "$localfile")
 		    if (( ours > last && theirs > last )); then # Locally modified.
 		    	if [ $interactive -eq 1]; then
-					ask_question "$name was updated both local and online. Overwrite?" "y n"
+					ask_question "$name was updated both local and online. Overwrite?" "y n" answer
 				else
 					if [ $override -eq 0 ]; then
 						answer="n"
@@ -320,13 +359,9 @@ sync_files() {
 		    fi
 		else
 		 	if [ $interactive -eq 1 ]; then
-		    	ask_question "$name was created online. Download?" "y n"
+		    	ask_question "$name was created online. Download?" "y n" answer
 		    else
-				if [ $override -eq 0 ]; then
-					answer="n"
-				else
-					answer="y"
-				fi
+		    	answer="y"
 		    fi
 		fi
 
